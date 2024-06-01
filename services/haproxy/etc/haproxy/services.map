@@ -1,2 +1,4 @@
 pg     postgres
 db     pgweb
+smtp   mailpit
+mail   mailpit
