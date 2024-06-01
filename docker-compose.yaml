@@ -1,0 +1,53 @@
+services:
+
+  haproxy:
+    image: docker.io/haproxytech/haproxy-alpine:3.0.0
+    volumes:
+      - ./services/haproxy/etc/haproxy:/etc/haproxy
+      - ./certs/tls.pem:/etc/ssl/certs/tls.pem
+    ports:
+      - 80:80
+      - 443:443
+    networks:
+      default:
+        aliases:
+          - pg.${DOMAIN_NAME}
+          - db.${DOMAIN_NAME}
+    healthcheck:
+      test: for port in 80 443 5432; do /usr/bin/nc -z 127.0.0.1 $$port; done
+      interval: 3s
+      start_period: 3s
+      retries: 10
+
+  postgres:
+    image: docker.io/library/postgres:16.3-alpine3.20
+    environment:
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+      POSTGRES_DATABASES: ${POSTGRES_DATABASES}
+    volumes:
+      - pg_data:/var/lib/postgresql/data
+      - ./services/postgres/docker-entrypoint-initdb.d:/docker-entrypoint-initdb.d
+      - ./services/postgres/tmp:/tmp
+    healthcheck:
+      test: /tmp/healthcheck.sh
+      interval: 5s
+      start_period: 2s
+      retries: 10
+
+  pgweb:
+    image: docker.io/sosedoff/pgweb:0.15.0
+    environment:
+      PGWEB_DATABASE_URL: postgres://postgres:${POSTGRES_PASSWORD}@pg.${DOMAIN_NAME}/postgres?sslmode=disable
+    depends_on:
+      haproxy:
+        condition: service_healthy
+      postgres:
+        condition: service_healthy
+    healthcheck:
+      test: /usr/bin/curl -o /dev/null -fsS http://localhost:8081
+      interval: 3s
+      start_period: 3s
+      retries: 10
+
+volumes:
+  pg_data:
